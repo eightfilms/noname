@@ -20,6 +20,7 @@ pub struct LexerCtx {
 }
 
 impl LexerCtx {
+    #[must_use]
     pub fn new(filename_id: usize) -> Self {
         Self {
             offset: 0,
@@ -27,10 +28,12 @@ impl LexerCtx {
         }
     }
 
+    #[must_use]
     pub fn error(&self, kind: ErrorKind, span: Span) -> Error {
         Error::new("lexer", kind, span)
     }
 
+    #[must_use]
     pub fn span(&self, start: usize, len: usize) -> Span {
         Span::new(self.filename_id, start, len)
     }
@@ -69,6 +72,7 @@ pub enum Keyword {
 }
 
 impl Keyword {
+    #[must_use]
     pub fn parse(s: &str) -> Option<Self> {
         match s {
             "use" => Some(Self::Use),
@@ -109,7 +113,7 @@ impl Display for Keyword {
             Self::Const => "const",
         };
 
-        write!(f, "{}", desc)
+        write!(f, "{desc}")
     }
 }
 
@@ -152,7 +156,12 @@ pub enum TokenKind {
 
 impl Display for TokenKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use TokenKind::*;
+        use TokenKind::{
+            Ampersand, BigInt, Colon, Comma, Comment, Dot, DoubleAmpersand, DoubleColon, DoubleDot,
+            DoubleEqual, DoublePipe, Equal, Exclamation, Greater, Hex, Identifier, Keyword,
+            LeftBracket, LeftCurlyBracket, LeftParen, Less, Minus, Pipe, Plus, Question,
+            RightArrow, RightBracket, RightCurlyBracket, RightParen, SemiColon, Slash, Star,
+        };
         let desc = match self {
             Keyword(_) => "keyword (use, let, etc.)",
             Identifier(_) => {
@@ -191,7 +200,7 @@ impl Display for TokenKind {
             //            TokenType::Literal => "`\"something\"",
         };
 
-        write!(f, "{}", desc)
+        write!(f, "{desc}")
     }
 }
 
@@ -432,22 +441,22 @@ impl Token {
 mod tests {
     use super::*;
 
-    const CODE: &str = r#"use crypto::poseidon;
+    const CODE: &str = r"use crypto::poseidon;
 
 fn main(public_input: [fel; 3], private_input: [fel; 3]) -> [fel; 8] {
     let digest = poseidon(private_input);
     assert(digest == public_input);
 }
-"#;
+";
 
     #[test]
     fn test_lexer() {
         match Token::parse(0, CODE) {
             Ok(root) => {
-                println!("{:#?}", root);
+                println!("{root:#?}");
             }
             Err(e) => {
-                println!("{:?}", e);
+                println!("{e:?}");
             }
         }
     }

@@ -1,4 +1,8 @@
-use std::{fmt::Display, str::FromStr};
+use std::{
+    fmt::Display,
+    hash::{Hash, Hasher},
+    str::FromStr,
+};
 
 use ark_ff::Field;
 use serde::{Deserialize, Serialize};
@@ -153,7 +157,7 @@ pub struct Ty {
 
 /// The module preceding structs, functions, or variables.
 // TODO: Hash should probably be implemented manually, right now two alias might have different span and so this will give different hashes
-#[derive(Default, Debug, Clone, Serialize, Deserialize, Hash, Eq)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize, Eq)]
 pub enum ModulePath {
     #[default]
     /// This is a local type, not imported from another module.
@@ -165,6 +169,16 @@ pub enum ModulePath {
     /// This is a type imported from another module,
     /// fully-qualified (as `user::repo`) thanks to the name resolution pass of the compiler.
     Absolute(UserRepo),
+}
+
+impl Hash for ModulePath {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match &self {
+            Self::Local => self.hash(state),
+            Self::Alias(i) => i.hash(state),
+            Self::Absolute(u) => u.hash(state),
+        }
+    }
 }
 
 // TODO: do we want to implement this on Ident instead?
@@ -206,6 +220,7 @@ pub enum TyKind {
 }
 
 impl TyKind {
+    #[must_use]
     pub fn match_expected(&self, expected: &TyKind) -> bool {
         match (self, expected) {
             (TyKind::BigInt, TyKind::Field) => true,
@@ -224,6 +239,7 @@ impl TyKind {
         }
     }
 
+    #[must_use]
     pub fn same_as(&self, other: &TyKind) -> bool {
         match (self, other) {
             (TyKind::BigInt, TyKind::Field) | (TyKind::Field, TyKind::BigInt) => true,
@@ -260,17 +276,18 @@ impl Display for TyKind {
                     name = name,
                     module = module.value
                 ),
-                ModulePath::Local => write!(f, "a `{}` struct", name),
+                ModulePath::Local => write!(f, "a `{name}` struct"),
             },
             TyKind::Field => write!(f, "Field"),
             TyKind::BigInt => write!(f, "BigInt"),
-            TyKind::Array(ty, size) => write!(f, "[{}; {}]", ty, size),
+            TyKind::Array(ty, size) => write!(f, "[{ty}; {size}]"),
             TyKind::Bool => write!(f, "Bool"),
         }
     }
 }
 
 impl Ty {
+    #[must_use]
     pub fn reserved_types(module: ModulePath, name: Ident) -> TyKind {
         match name.value.as_ref() {
             "Field" | "Bool" if !matches!(module, ModulePath::Local) => {
@@ -349,7 +366,7 @@ impl Ty {
                         .map_err(|_e| ctx.error(ErrorKind::InvalidArraySize, siz.span))?,
                     _ => {
                         return Err(ctx.error(
-                            ErrorKind::ExpectedToken(TokenKind::BigInt("".to_string())),
+                            ErrorKind::ExpectedToken(TokenKind::BigInt(String::new())),
                             siz.span,
                         ));
                     }
@@ -408,6 +425,7 @@ pub struct Ident {
 }
 
 impl Ident {
+    #[must_use]
     pub fn new(value: String, span: Span) -> Self {
         Self { value, span }
     }
@@ -421,7 +439,7 @@ impl Ident {
             }),
 
             _ => Err(ctx.error(
-                ErrorKind::ExpectedToken(TokenKind::Identifier("".to_string())),
+                ErrorKind::ExpectedToken(TokenKind::Identifier(String::new())),
                 token.span,
             )),
         }
@@ -435,10 +453,12 @@ pub enum AttributeKind {
 }
 
 impl AttributeKind {
+    #[must_use]
     pub fn is_public(&self) -> bool {
         matches!(self, Self::Pub)
     }
 
+    #[must_use]
     pub fn is_constant(&self) -> bool {
         matches!(self, Self::Const)
     }
@@ -451,10 +471,12 @@ pub struct Attribute {
 }
 
 impl Attribute {
+    #[must_use]
     pub fn is_public(&self) -> bool {
         self.kind.is_public()
     }
 
+    #[must_use]
     pub fn is_constant(&self) -> bool {
         self.kind.is_constant()
     }
@@ -517,18 +539,14 @@ pub struct FnArg {
 }
 
 impl FnArg {
+    #[must_use]
     pub fn is_public(&self) -> bool {
-        self.attribute
-            .as_ref()
-            .map(|attr| attr.is_public())
-            .unwrap_or(false)
+        self.attribute.as_ref().is_some_and(Attribute::is_public)
     }
 
+    #[must_use]
     pub fn is_constant(&self) -> bool {
-        self.attribute
-            .as_ref()
-            .map(|attr| attr.is_constant())
-            .unwrap_or(false)
+        self.attribute.as_ref().is_some_and(Attribute::is_constant)
     }
 }
 
@@ -577,6 +595,7 @@ impl FuncOrMethod {
 }
 
 impl FunctionDef {
+    #[must_use]
     pub fn is_main(&self) -> bool {
         self.sig.name.value == "main"
     }
@@ -690,12 +709,10 @@ impl FunctionDef {
                 } else {
                     attr.span.merge_with(arg_typ.span)
                 }
+            } else if &arg_name.value == "self" {
+                arg_name.span
             } else {
-                if &arg_name.value == "self" {
-                    arg_name.span
-                } else {
-                    arg_name.span.merge_with(arg_typ.span)
-                }
+                arg_name.span.merge_with(arg_typ.span)
             };
 
             let arg = FnArg {
@@ -814,6 +831,7 @@ impl FunctionDef {
 }
 
 // TODO: enforce snake_case?
+#[must_use]
 pub fn is_valid_fn_name(name: &str) -> bool {
     if let Some(first_char) = name.chars().next() {
         // first character is not a number
@@ -828,6 +846,7 @@ pub fn is_valid_fn_name(name: &str) -> bool {
 }
 
 // TODO: enforce CamelCase?
+#[must_use]
 pub fn is_valid_fn_type(name: &str) -> bool {
     if let Some(first_char) = name.chars().next() {
         // first character is not a number or alpha
@@ -867,6 +886,7 @@ pub struct Range {
 }
 
 impl Range {
+    #[must_use]
     pub fn range(&self) -> std::ops::Range<u32> {
         self.start..self.end
     }
@@ -979,7 +999,7 @@ impl Stmt {
                     }
                     _ => {
                         return Err(ctx.error(
-                            ErrorKind::ExpectedToken(TokenKind::BigInt("".to_string())),
+                            ErrorKind::ExpectedToken(TokenKind::BigInt(String::new())),
                             ctx.last_span(),
                         ))
                     }
@@ -1003,7 +1023,7 @@ impl Stmt {
                     }
                     _ => {
                         return Err(ctx.error(
-                            ErrorKind::ExpectedToken(TokenKind::BigInt("".to_string())),
+                            ErrorKind::ExpectedToken(TokenKind::BigInt(String::new())),
                             ctx.last_span(),
                         ))
                     }
